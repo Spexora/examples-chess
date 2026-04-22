@@ -3,13 +3,17 @@
   import type { Game, GameEvent, ChatMessage } from '$lib/server/types.js';
   import Board from './components/Board.svelte';
   import Chat from './components/Chat.svelte';
-  import { onMount, onDestroy } from 'svelte';
+  import { onMount, onDestroy, untrack } from 'svelte';
 
   let { data }: { data: PageData } = $props();
 
-  let game: Game = $state(data.game);
-  const playerId: string = data.playerId;
-  const isFull: boolean = data.isFull;
+  // Use untrack so Svelte knows we intentionally capture the initial load value
+  // and manage game state locally (via SSE events and move API responses).
+  let game: Game = $state(untrack(() => data.game));
+  // $derived so that TypeScript and Svelte both know these are tied to the
+  // server-rendered data, eliminating the state_referenced_locally warning.
+  const playerId = $derived(data.playerId);
+  const isFull = $derived(data.isFull);
   let eventSource: EventSource | null = $state(null);
   let moveError = $state('');
   let copySuccess = $state(false);

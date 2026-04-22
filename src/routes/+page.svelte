@@ -1,9 +1,7 @@
 <script lang="ts">
-  import { enhance } from '$app/forms';
-
-  let selectedColor: 'white' | 'black' | null = null;
-  let validationError = '';
-  let loading = false;
+  let selectedColor: 'white' | 'black' | null = $state(null);
+  let validationError = $state('');
+  let loading = $state(false);
 
   function handleSubmit(event: SubmitEvent) {
     if (!selectedColor) {
@@ -28,8 +26,7 @@
     <form
       method="POST"
       action="?/createGame"
-      use:enhance
-      on:submit={handleSubmit}
+      onsubmit={handleSubmit}
     >
       <input type="hidden" name="color" value={selectedColor ?? ''} />
 
@@ -39,7 +36,7 @@
           <button
             type="button"
             class="color-btn {selectedColor === 'white' ? 'selected' : ''}"
-            on:click={() => (selectedColor = 'white')}
+            onclick={() => (selectedColor = 'white')}
             aria-pressed={selectedColor === 'white'}
           >
             <span class="piece-icon">♔</span>
@@ -48,7 +45,7 @@
           <button
             type="button"
             class="color-btn {selectedColor === 'black' ? 'selected' : ''}"
-            on:click={() => (selectedColor = 'black')}
+            onclick={() => (selectedColor = 'black')}
             aria-pressed={selectedColor === 'black'}
           >
             <span class="piece-icon">♚</span>
