@@ -1,25 +1,26 @@
-import { error, redirect } from "@sveltejs/kit";
+import { error } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types.js";
 import { store } from "$lib/server/store.js";
 
-export const load: PageServerLoad = async ({ params, cookies, url }) => {
+export const load: PageServerLoad = async ({ params, cookies }) => {
   const game = store.getGame(params.id);
   if (!game) throw error(404, "Game not found");
 
-  // Prefer the cookie.  Fall back to the ?pid= query parameter, which is
-  // included in the redirect URL from the game-creation form action to
-  // guarantee the host is correctly identified even when SvelteKit's
-  // client-side router follows the redirect before the Set-Cookie from the
-  // action response is committed to the browser's cookie store.
-  let playerId = cookies.get("playerId") ?? url.searchParams.get("pid") ?? null;
+  // Read the player identity from the cookie.  The cookie is set either:
+  //   1. When the host created the game (via POST /api/games), or
+  //   2. When a guest first visited this page (set below).
+  // We no longer fall back to a ?pid= query parameter — the cookie is always
+  // reliably present because the home page uses `fetch` + `window.location.href`
+  // for game creation, which guarantees the Set-Cookie is committed to the
+  // browser's jar before this load function runs.
+  let playerId = cookies.get("playerId") ?? null;
 
   if (!playerId) {
-    // Completely new visitor — assign a fresh identity.
+    // New visitor (guest arriving via invite link) — assign a fresh identity.
     playerId = crypto.randomUUID();
   }
 
-  // Always (re-)set the cookie so the browser's jar is up to date regardless
-  // of whether we read the id from the cookie or from the URL parameter.
+  // Always (re-)set the cookie so it stays fresh on every visit.
   cookies.set("playerId", playerId, {
     path: "/",
     httpOnly: true,
@@ -31,13 +32,12 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
   const isGuest = game.guestId === playerId;
   const isParticipant = isHost || isGuest;
 
-  // Auto-join if not already a participant and game is waiting
+  // If not a participant and the game is already running, show a "full" page.
   if (!isParticipant && game.status !== "waiting") {
-    // Game is full - return a "full" state so UI can show error
     return { game, playerId, isFull: true };
   }
 
-  // Join if arriving via invite and not yet a participant
+  // New guest arriving via invite link — auto-join.
   if (!isParticipant && game.status === "waiting") {
     const result = store.joinGame(params.id, playerId);
     if (!result.success) {

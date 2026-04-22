@@ -56,6 +56,7 @@ export interface JoinResult {
 }
 
 export type EventType =
+  | "current_state"
   | "game_started"
   | "state_update"
   | "game_over"

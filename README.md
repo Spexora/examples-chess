@@ -105,12 +105,12 @@ features/
 
 ## Architecture
 
-- Game state is stored **in-memory** on the server (a Map of game ID → game state)
+- Game state is stored **in-memory** on the server (a `Map` of game ID → game state). The store is pinned to `globalThis` so that Vite's hot-module replacement in development does not wipe in-flight games between module reloads.
 - Clients send moves via **POST** to `/api/games/:id/move`; the server validates with chess.js
 - After each accepted move, the server broadcasts the new state to all connected clients via **SSE**
 - Clients subscribe to `/api/games/:id/sse` and update the board in real time
 - **Player identity** is stored in a server-side cookie (`playerId`) set when creating or joining a game
-- Game creation uses a standard HTML form (`POST /?/createGame`) handled by a SvelteKit **form action**. The form action redirects to `/game/:id?pid=<hostId>`. The game page's server-side load function reads the player identity from the cookie first, then falls back to the `?pid=` URL parameter. This guarantees the host is correctly identified even when SvelteKit's client-side router follows the redirect before the `Set-Cookie` header from the form-action response is committed to the browser's cookie store — a race condition that reliably manifests when the server is accessed via a LAN/IP address. After the page mounts, `replaceState` strips `?pid=` from the address bar so that the clean `/game/:id` URL appears in the invite-link box and is safe to share.
+- Game creation is handled by a **JavaScript `fetch`** to `POST /api/games` followed by `window.location.href = '/game/:id'`. Using `fetch` rather than a SvelteKit form action + redirect guarantees the browser commits the `Set-Cookie` response header to its cookie jar before the game page is requested — eliminating a race condition that manifests reliably when the server is accessed via a LAN/IP address. The invite URL shown to the host is always the clean `/game/:id` URL with no query parameters.
 - The SSE endpoint accepts the player ID via the `?pid=` query parameter as a reliable fallback, because `EventSource` does not support custom headers and cookies may not be forwarded in all environments (proxies, certain browser configurations, etc.)
 - The SSE stream uses a proper `cancel()` cleanup hook (not the ignored `start()` return value), a 25-second heartbeat to keep connections alive through proxies, and `X-Accel-Buffering: no` to prevent reverse-proxy buffering
 - The move API response includes the new game state; the moving player's board is updated immediately from that response rather than waiting for the SSE echo, so both players see changes in real time

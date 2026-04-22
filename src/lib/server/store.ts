@@ -250,5 +250,16 @@ export function createStore() {
   };
 }
 
-// Singleton for production use (SvelteKit server)
-export const store = createStore();
+// Singleton for the SvelteKit server.
+//
+// We pin the instance to `globalThis` so that Vite's hot-module replacement in
+// development mode does not wipe the in-memory game state every time a module
+// is re-evaluated.  In production (where HMR is not active) this is a no-op
+// apart from the normal module-level singleton pattern.
+declare global {
+  // eslint-disable-next-line no-var
+  var __chessGameStore: Store | undefined;
+}
+
+export const store: Store =
+  globalThis.__chessGameStore ?? (globalThis.__chessGameStore = createStore());

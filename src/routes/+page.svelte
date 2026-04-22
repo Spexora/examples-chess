@@ -3,14 +3,46 @@
   let validationError = $state('');
   let loading = $state(false);
 
-  function handleSubmit(event: SubmitEvent) {
+  async function handleSubmit(event: SubmitEvent) {
+    event.preventDefault();
+
     if (!selectedColor) {
-      event.preventDefault();
       validationError = 'Please choose a color to play as.';
       return;
     }
+
     validationError = '';
     loading = true;
+
+    try {
+      // POST to the REST endpoint.  The response carries a Set-Cookie header
+      // that the browser commits to its jar before `fetch` resolves, so by the
+      // time we call `window.location.href` below the playerId cookie is
+      // already present.  This avoids the race condition where SvelteKit's
+      // client-side router follows a 303 redirect before the browser has had a
+      // chance to process the Set-Cookie — a race that manifests reliably when
+      // the server is accessed via a LAN/IP address rather than localhost.
+      const res = await fetch('/api/games', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ color: selectedColor }),
+      });
+
+      if (!res.ok) {
+        loading = false;
+        validationError = 'Failed to create game. Please try again.';
+        return;
+      }
+
+      const { gameId } = await res.json();
+
+      // Full browser navigation — NOT a SvelteKit goto() — so the new page
+      // request is always made with the freshly-set cookie in the cookie jar.
+      window.location.href = `/game/${gameId}`;
+    } catch {
+      loading = false;
+      validationError = 'Network error. Please try again.';
+    }
   }
 </script>
 
@@ -23,11 +55,7 @@
     <h1 class="title">♟ Chess</h1>
     <p class="subtitle">Challenge a friend to a game</p>
 
-    <form
-      method="POST"
-      action="?/createGame"
-      onsubmit={handleSubmit}
-    >
+    <form onsubmit={handleSubmit}>
       <input type="hidden" name="color" value={selectedColor ?? ''} />
 
       <div class="color-choice">
