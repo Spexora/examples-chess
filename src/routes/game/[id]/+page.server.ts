@@ -1,4 +1,4 @@
-import { error, redirect } from "@sveltejs/kit";
+import { error } from "@sveltejs/kit";
 import type { PageServerLoad } from "./$types.js";
 import { store } from "$lib/server/store.js";
 
@@ -13,38 +13,39 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
   const game = store.getGame(params.id);
   if (!game) throw error(404, "Game not found");
 
-  // ── Host-token redirect ──────────────────────────────────────────────────
-  // After game creation, the home page navigates to /game/:id?h=<hostId>.
-  // We validate the token here, set the playerId cookie in the response
-  // headers, and redirect to the clean /game/:id URL.
+  // ── Player identity resolution ───────────────────────────────────────────
   //
-  // The browser processes Set-Cookie headers from HTTP redirect responses
-  // BEFORE it follows the redirect, so the cookie is guaranteed to be present
-  // on every subsequent request — including the load triggered by the
-  // redirect.  This is reliable on localhost AND on LAN/IP addresses, because
-  // it relies on the HTTP specification rather than on `fetch` cookie timing.
+  // Priority order:
+  //   1. Valid ?h=<hostId> token  →  identify as host immediately.
+  //   2. Existing playerId cookie  →  returning visitor.
+  //   3. Neither                  →  new visitor (potential guest), assign UUID.
+  //
+  // IMPORTANT — no redirect is used here.  We set the cookie directly in the
+  // headers of THIS response (the actual page response, not a 3xx redirect).
+  // Browsers always process Set-Cookie headers before executing any
+  // JavaScript, which makes this 100 % reliable on localhost and LAN/IP
+  // addresses alike.  Redirect-based cookie delivery can lose a race against
+  // SvelteKit's client-side router or the browser Navigation API, which is
+  // what caused the "directly in game, no lobby" bug on LAN.
   const hostToken = url.searchParams.get("h");
+  let playerId: string;
+
   if (hostToken && hostToken === game.hostId) {
-    cookies.set("playerId", game.hostId, COOKIE_OPTS);
-    throw redirect(302, `/game/${params.id}`);
+    // Valid host token — treat this visitor as the host.
+    playerId = game.hostId;
+  } else {
+    // Returning visitor or brand-new visitor.
+    playerId = cookies.get("playerId") ?? crypto.randomUUID();
   }
 
-  // ── Normal visitor ───────────────────────────────────────────────────────
-  let playerId = cookies.get("playerId") ?? null;
-
-  if (!playerId) {
-    // New visitor (guest arriving via invite link) — assign a fresh identity.
-    playerId = crypto.randomUUID();
-  }
-
-  // Always (re-)set the cookie so it stays fresh on every visit.
+  // Commit the identity to the cookie store for this response.
   cookies.set("playerId", playerId, COOKIE_OPTS);
 
   const isHost = game.hostId === playerId;
   const isGuest = game.guestId === playerId;
   const isParticipant = isHost || isGuest;
 
-  // If not a participant and the game is already full/finished, show an info page.
+  // Spectator / late arrival — game is already full or finished.
   if (!isParticipant && game.status !== "waiting") {
     return { game, playerId, isFull: true };
   }

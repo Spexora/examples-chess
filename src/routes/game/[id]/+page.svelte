@@ -56,6 +56,16 @@
   }
 
   onMount(() => {
+    // If the URL still carries the one-time host token (?h=…), strip it from
+    // the address bar immediately.  The token has already done its job: the
+    // server read it, set the playerId cookie in the page response headers,
+    // and returned the lobby.  Keeping the token in the URL would (a) look
+    // messy and (b) risk the host accidentally copying and sharing it.
+    // replaceState is safe here because all of the important state comes from
+    // the server-rendered `data` prop, not from the URL.
+    if (window.location.search.includes('h=')) {
+      history.replaceState(null, '', window.location.pathname);
+    }
     connectSSE();
   });
 

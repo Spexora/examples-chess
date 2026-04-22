@@ -110,12 +110,13 @@ features/
 - After each accepted move, the server broadcasts the new state to all connected clients via **SSE**
 - Clients subscribe to `/api/games/:id/sse` and update the board in real time
 - **Player identity** is stored in a server-side cookie (`playerId`) set when creating or joining a game
-- Game creation uses a **two-step navigation** to guarantee reliable cookie delivery on both localhost and LAN/IP addresses:
+- Game creation uses a **direct-response cookie** strategy to guarantee reliable identity delivery on both localhost and LAN/IP addresses:
   1. The home page calls `POST /api/games` via JavaScript `fetch` and receives `{ gameId, hostId }`.
   2. It navigates to `/game/:id?h=<hostId>` via `window.location.href`.
-  3. The game page's server-side `load` function validates the `?h=` token against `game.hostId`, sets the `playerId` cookie in the HTTP response headers, and issues a **302 redirect** to the clean `/game/:id` URL.
-  4. The browser processes the `Set-Cookie` header from the redirect response **before** following the redirect — this is guaranteed by the HTTP specification and is reliable on every browser and network configuration. The lobby is shown on the clean URL.
-- The invite URL shown to the host is always the clean `/game/:id` URL with no query parameters.
+  3. The game page's server-side `load` function validates the `?h=` token against `game.hostId`, sets the `playerId` cookie in **this response's headers** (not in a redirect), and returns the lobby data directly.
+  4. Browsers always commit `Set-Cookie` headers before executing any JavaScript, so the cookie is in place before `onMount` runs — guaranteed on every browser and network configuration.
+  5. `onMount` calls `history.replaceState` to strip the one-time `?h=` token from the address bar, giving a clean URL.
+- The invite URL shown in the lobby is always the clean `/game/:id` URL (built from `window.location.origin + '/game/' + game.id`, independent of the address-bar URL).
 - The SSE endpoint accepts the player ID via the `?pid=` query parameter as a reliable fallback, because `EventSource` does not support custom headers and cookies may not be forwarded in all environments (proxies, certain browser configurations, etc.)
 - The SSE stream uses a proper `cancel()` cleanup hook (not the ignored `start()` return value), a 25-second heartbeat to keep connections alive through proxies, and `X-Accel-Buffering: no` to prevent reverse-proxy buffering
 - The move API response includes the new game state; the moving player's board is updated immediately from that response rather than waiting for the SSE echo, so both players see changes in real time

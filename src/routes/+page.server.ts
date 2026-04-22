@@ -20,6 +20,9 @@ export const actions: Actions = {
     }
 
     const game = store.createGame(hostId, color);
-    redirect(303, `/game/${game.id}`);
+    // Include the host token so the game page can commit the playerId cookie
+    // in the direct page response rather than relying on redirect-based cookie
+    // delivery (which races against the browser's client-side router on LAN).
+    redirect(303, `/game/${game.id}?h=${encodeURIComponent(game.hostId)}`);
   },
 };
