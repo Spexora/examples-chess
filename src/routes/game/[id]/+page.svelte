@@ -4,6 +4,7 @@
   import Board from './components/Board.svelte';
   import Chat from './components/Chat.svelte';
   import { onMount, onDestroy, untrack } from 'svelte';
+  import { replaceState } from '$app/navigation';
 
   let { data }: { data: PageData } = $props();
 
@@ -56,6 +57,15 @@
   }
 
   onMount(() => {
+    // Strip ?pid= from the address bar so it is not shared or visible.
+    // replaceState does not trigger a navigation or re-run the load function —
+    // it only updates the URL shown in the browser.
+    const currentUrl = new URL(window.location.href);
+    if (currentUrl.searchParams.has('pid')) {
+      currentUrl.searchParams.delete('pid');
+      const cleanUrl = currentUrl.pathname + (currentUrl.search && currentUrl.search !== '?' ? currentUrl.search : '');
+      replaceState(cleanUrl, window.history.state ?? {});
+    }
     connectSSE();
   });
 

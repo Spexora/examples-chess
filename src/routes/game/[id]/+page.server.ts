@@ -6,16 +6,26 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
   const game = store.getGame(params.id);
   if (!game) throw error(404, "Game not found");
 
-  let playerId = cookies.get("playerId");
+  // Prefer the cookie.  Fall back to the ?pid= query parameter, which is
+  // included in the redirect URL from the game-creation form action to
+  // guarantee the host is correctly identified even when SvelteKit's
+  // client-side router follows the redirect before the Set-Cookie from the
+  // action response is committed to the browser's cookie store.
+  let playerId = cookies.get("playerId") ?? url.searchParams.get("pid") ?? null;
+
   if (!playerId) {
+    // Completely new visitor — assign a fresh identity.
     playerId = crypto.randomUUID();
-    cookies.set("playerId", playerId, {
-      path: "/",
-      httpOnly: true,
-      sameSite: "lax",
-      maxAge: 60 * 60 * 24 * 7,
-    });
   }
+
+  // Always (re-)set the cookie so the browser's jar is up to date regardless
+  // of whether we read the id from the cookie or from the URL parameter.
+  cookies.set("playerId", playerId, {
+    path: "/",
+    httpOnly: true,
+    sameSite: "lax",
+    maxAge: 60 * 60 * 24 * 7,
+  });
 
   const isHost = game.hostId === playerId;
   const isGuest = game.guestId === playerId;

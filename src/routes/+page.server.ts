@@ -20,6 +20,12 @@ export const actions: Actions = {
     }
 
     const game = store.createGame(hostId, color);
-    redirect(303, `/game/${game.id}`);
+    // Include the host's playerId as a ?pid= query parameter so the game
+    // page's server-side load function can always identify the host even when
+    // SvelteKit's client-side router follows the redirect before the
+    // Set-Cookie header from this response is committed to the browser's
+    // cookie store (a race that occurs reliably when the server is accessed
+    // via a LAN/IP address rather than localhost).
+    redirect(303, `/game/${game.id}?pid=${hostId}`);
   },
 };
