@@ -7,66 +7,100 @@
 
   let { data }: { data: PageData } = $props();
 
-  // Use untrack so Svelte knows we intentionally capture the initial load value
-  // and manage game state locally (via SSE events and move API responses).
+  // game is managed as independent local state — updated by SSE events and
+  // move API responses (not tied to data prop).
   let game: Game = $state(untrack(() => data.game));
-  // $derived so that TypeScript and Svelte both know these are tied to the
-  // server-rendered data, eliminating the state_referenced_locally warning.
-  const playerId = $derived(data.playerId);
-  const isFull = $derived(data.isFull);
+
+  // playerId and isFull start from server-rendered data but are updated
+  // client-side in onMount (joining, identity recovery).  untrack() tells
+  // Svelte we intentionally take a snapshot — these become independent local
+  // state variables that we manage ourselves.
+  let playerId: string = $state(untrack(() => data.playerId ?? ''));
+  let isFull: boolean = $state(untrack(() => data.isFull));
+
   let eventSource: EventSource | null = $state(null);
   let moveError = $state('');
   let copySuccess = $state(false);
 
+  // Derived view state.
   let playerColor = $derived(
     game.hostId === playerId ? game.hostColor : game.hostColor === 'white' ? 'black' : 'white'
   );
-  let isParticipant = $derived(game.hostId === playerId || game.guestId === playerId);
   let isMyTurn = $derived(game.status === 'active' && game.turn === playerColor);
-  let inviteUrl = $derived(
-    typeof window !== 'undefined' ? `${window.location.origin}/game/${game.id}` : `/game/${game.id}`
-  );
+  // Invite URL is always the clean /game/:id — built after mount so
+  // window.location.origin is available.
+  let inviteUrl = $state('');
 
   function connectSSE() {
-    if (!isParticipant || typeof EventSource === 'undefined') return;
-    // Close any existing connection before opening a new one.
+    if (!playerId || typeof EventSource === 'undefined') return;
     eventSource?.close();
-    // Pass playerId as a query parameter because EventSource does not
-    // support custom headers and cookies may not be forwarded reliably in
-    // all environments (proxies, certain SvelteKit dev/build configs, etc.)
+    // Pass playerId as a query parameter: EventSource doesn't support custom
+    // headers, and cookies may not be forwarded reliably on all environments
+    // (proxies, LAN/IP, certain SvelteKit dev-server configurations).
     const url = `/api/games/${game.id}/sse?pid=${encodeURIComponent(playerId)}`;
     eventSource = new EventSource(url);
     eventSource.onmessage = (e) => {
       try {
-        const event: GameEvent = JSON.parse(e.data);
-        // Ignore heartbeat pings — they carry no game state.
-        if (event.type === 'ping') return;
-        game = { ...game, ...(event.data as Game) };
+        const ev: GameEvent = JSON.parse(e.data);
+        if (ev.type === 'ping') return; // heartbeat only
+        // Merge incoming state into the local game object.
+        game = { ...game, ...(ev.data as Game) };
       } catch {
-        // Malformed message — ignore.
+        // Malformed frame — ignore.
       }
     };
     eventSource.onerror = () => {
-      // Close the broken connection and reconnect after a short delay.
-      // EventSource has built-in reconnection, but we close explicitly so
-      // we control the timing and avoid stale handlers.
       eventSource?.close();
+      eventSource = null;
       setTimeout(connectSSE, 3000);
     };
   }
 
-  onMount(() => {
-    // If the URL still carries the one-time host token (?h=…), strip it from
-    // the address bar immediately.  The token has already done its job: the
-    // server read it, set the playerId cookie in the page response headers,
-    // and returned the lobby.  Keeping the token in the URL would (a) look
-    // messy and (b) risk the host accidentally copying and sharing it.
-    // replaceState is safe here because all of the important state comes from
-    // the server-rendered `data` prop, not from the URL.
+  onMount(async () => {
+    // Build the clean invite URL from the actual origin (not available SSR).
+    inviteUrl = `${window.location.origin}/game/${game.id}`;
+
+    // Strip the one-time ?h= host token from the address bar — it has already
+    // been consumed by the server-side load function.
     if (window.location.search.includes('h=')) {
       history.replaceState(null, '', window.location.pathname);
     }
-    connectSSE();
+
+    if (!playerId) {
+      // Unknown visitor (cookie missing or never set).
+      // Check sessionStorage for a previously stored identity (covers the
+      // "host refreshes page and cookie was lost" case), then call the join
+      // endpoint.  The join endpoint:
+      //   • accepts X-Player-Id for identity recovery (host / returning guest)
+      //   • generates a fresh UUID for brand-new guests
+      //   • always (re-)commits the playerId cookie in its response
+      // After the fetch() Promise resolves, the cookie is guaranteed to be
+      // committed to the browser jar, so subsequent move / chat requests work.
+      const stored = sessionStorage.getItem(`chess-pid-${game.id}`);
+      const headers: Record<string, string> = {};
+      if (stored) headers['X-Player-Id'] = stored;
+
+      const res = await fetch(`/api/games/${game.id}/join`, { method: 'POST', headers });
+
+      if (res.ok) {
+        const body = await res.json();
+        playerId = body.playerId;
+        game = body.game;
+        isFull = false;
+        sessionStorage.setItem(`chess-pid-${game.id}`, playerId);
+      } else {
+        // Game is full or some other error — visitor cannot participate.
+        isFull = true;
+      }
+    } else {
+      // Participant already identified server-side — persist in sessionStorage
+      // so that the identity can be recovered if the cookie is ever lost.
+      sessionStorage.setItem(`chess-pid-${game.id}`, playerId);
+    }
+
+    if (!isFull) {
+      connectSSE();
+    }
   });
 
   onDestroy(() => {
@@ -86,10 +120,6 @@
       if (!body.accepted) {
         moveError = body.reason ?? 'Move rejected';
       } else if (body.game) {
-        // Apply the updated game state immediately from the API response so
-        // the player who moved sees the result right away.  The SSE stream
-        // will also deliver a state_update to both players shortly after,
-        // which is the canonical update for the opponent.
         game = body.game;
       }
     } catch {
@@ -99,19 +129,28 @@
 
   async function copyInviteLink() {
     try {
-      await navigator.clipboard.writeText(inviteUrl);
+      // navigator.clipboard requires HTTPS or localhost.  On plain HTTP (e.g.
+      // LAN/IP in dev mode), fall back to the legacy execCommand approach.
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(inviteUrl);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = inviteUrl;
+        ta.style.cssText = 'position:fixed;left:-9999px;top:-9999px;opacity:0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
       copySuccess = true;
       setTimeout(() => (copySuccess = false), 2000);
     } catch {
-      // Fallback for environments without clipboard API
+      // Silent fail — the URL is visible in the invite box so the user can
+      // copy it manually.
     }
   }
 
   function handleMessageSent(msg: ChatMessage) {
-    // Optimistically surface the sent message for the local player immediately.
-    // When the SSE chat_message event arrives it will carry the full chat
-    // array from the server, which naturally deduplicates any temporary
-    // optimistic entry because the {#each} loop uses msg.id as the key.
     if (!game.chat.some((m) => m.id === msg.id)) {
       game = { ...game, chat: [...game.chat, msg] };
     }
@@ -122,7 +161,8 @@
     if (game.status === 'waiting') return 'Waiting for opponent…';
     if (game.status === 'finished') {
       if (game.result === 'draw') {
-        const reason = game.drawReason === 'stalemate' ? 'Stalemate'
+        const reason =
+          game.drawReason === 'stalemate' ? 'Stalemate'
           : game.drawReason === 'insufficient_material' ? 'Insufficient material'
           : game.drawReason === 'threefold_repetition' ? 'Threefold repetition'
           : 'Fifty-move rule';
@@ -153,7 +193,7 @@
     <div class="lobby-card">
       <h1 class="title">♟ Waiting for Opponent</h1>
       <p class="color-info">
-        You are playing as <strong>{game.hostColor === playerColor ? game.hostColor : (game.hostColor === 'white' ? 'black' : 'white')}</strong>
+        You are playing as <strong>{playerColor}</strong>
       </p>
 
       <div class="invite-section">

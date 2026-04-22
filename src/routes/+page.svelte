@@ -36,16 +36,18 @@
 
       const { gameId, hostId } = await res.json();
 
-      // Navigate to the game page with the hostId embedded as a query
-      // parameter.  The game page's load function validates this token,
-      // sets the playerId cookie in its HTTP response, and then issues an
-      // HTTP 302 redirect to the clean /game/:id URL.  Because the browser
-      // processes Set-Cookie headers from redirect responses BEFORE following
-      // the redirect, the cookie is guaranteed to be present on every
-      // subsequent request — regardless of whether the app is accessed via
-      // localhost or a LAN/IP address.  This is more reliable than relying
-      // on the fetch() Set-Cookie path, which can lose the race against the
-      // navigation request in some browser/OS/network configurations.
+      // Persist the host identity in sessionStorage BEFORE navigating.
+      // sessionStorage is origin-scoped, synchronous, and not subject to any
+      // cookie-timing races.  On the game page, onMount reads this value and
+      // calls POST /api/games/:id/join with X-Player-Id: <hostId> so the
+      // server-side cookie is committed via the join response — a path that
+      // is 100 % reliable regardless of whether the app is on localhost or a
+      // LAN/IP address.
+      sessionStorage.setItem(`chess-pid-${gameId}`, hostId);
+
+      // Navigate to the game page.  The ?h= token lets the server-side load
+      // function identify the host immediately on the first render (so the
+      // lobby is shown server-side without a flash).  onMount will strip it.
       window.location.href = `/game/${gameId}?h=${encodeURIComponent(hostId)}`;
     } catch {
       loading = false;

@@ -15,49 +15,41 @@ export const load: PageServerLoad = async ({ params, cookies, url }) => {
 
   // ── Player identity resolution ───────────────────────────────────────────
   //
-  // Priority order:
-  //   1. Valid ?h=<hostId> token  →  identify as host immediately.
-  //   2. Existing playerId cookie  →  returning visitor.
-  //   3. Neither                  →  new visitor (potential guest), assign UUID.
+  // Priority:
+  //   1. Valid ?h=<hostId> token  →  identify as host, set cookie.
+  //   2. Existing valid cookie (must match a participant)  →  returning visitor.
+  //   3. Neither  →  unknown visitor (playerId = null).
   //
-  // IMPORTANT — no redirect is used here.  We set the cookie directly in the
-  // headers of THIS response (the actual page response, not a 3xx redirect).
-  // Browsers always process Set-Cookie headers before executing any
-  // JavaScript, which makes this 100 % reliable on localhost and LAN/IP
-  // addresses alike.  Redirect-based cookie delivery can lose a race against
-  // SvelteKit's client-side router or the browser Navigation API, which is
-  // what caused the "directly in game, no lobby" bug on LAN.
+  // IMPORTANT: we never auto-join here.  Joining is done client-side in
+  // onMount via POST /api/games/:id/join.  This avoids the race where a
+  // second server-side load (e.g. from SvelteKit's client router following a
+  // same-origin navigation) runs without the ?h= token and incorrectly joins
+  // the host as a guest — which was the root cause of "directly in game, no
+  // lobby" on LAN/IP addresses.
   const hostToken = url.searchParams.get("h");
-  let playerId: string;
+  let playerId: string | null = null;
 
   if (hostToken && hostToken === game.hostId) {
-    // Valid host token — treat this visitor as the host.
+    // Valid host token — identify as host and commit the cookie.
     playerId = game.hostId;
+    cookies.set("playerId", playerId, COOKIE_OPTS);
   } else {
-    // Returning visitor or brand-new visitor.
-    playerId = cookies.get("playerId") ?? crypto.randomUUID();
-  }
-
-  // Commit the identity to the cookie store for this response.
-  cookies.set("playerId", playerId, COOKIE_OPTS);
-
-  const isHost = game.hostId === playerId;
-  const isGuest = game.guestId === playerId;
-  const isParticipant = isHost || isGuest;
-
-  // Spectator / late arrival — game is already full or finished.
-  if (!isParticipant && game.status !== "waiting") {
-    return { game, playerId, isFull: true };
-  }
-
-  // New guest arriving via invite link — auto-join.
-  if (!isParticipant && game.status === "waiting") {
-    const result = store.joinGame(params.id, playerId);
-    if (!result.success) {
-      return { game, playerId, isFull: true };
+    const cookieId = cookies.get("playerId");
+    if (cookieId && (game.hostId === cookieId || game.guestId === cookieId)) {
+      // Returning participant with a valid cookie.
+      playerId = cookieId;
     }
-    return { game: result.game!, playerId, isFull: false };
+    // Unknown visitor: playerId stays null.
+    // The client will call POST /api/games/:id/join in onMount.
   }
 
-  return { game, playerId, isFull: false };
+  // The server can only declare the game "full" when it is certain the visitor
+  // is a stranger to an active game.  Unknown visitors to a waiting game are
+  // handled client-side (they become the guest).  Unknown visitors to an
+  // active game may still be a returning participant whose cookie was lost —
+  // the client will attempt identity recovery via sessionStorage before
+  // showing "game unavailable".
+  const isFull = playerId === null && game.status !== "waiting";
+
+  return { game, playerId, isFull };
 };

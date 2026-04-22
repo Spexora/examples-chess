@@ -109,14 +109,39 @@ features/
 - Clients send moves via **POST** to `/api/games/:id/move`; the server validates with chess.js
 - After each accepted move, the server broadcasts the new state to all connected clients via **SSE**
 - Clients subscribe to `/api/games/:id/sse` and update the board in real time
-- **Player identity** is stored in a server-side cookie (`playerId`) set when creating or joining a game
-- Game creation uses a **direct-response cookie** strategy to guarantee reliable identity delivery on both localhost and LAN/IP addresses:
-  1. The home page calls `POST /api/games` via JavaScript `fetch` and receives `{ gameId, hostId }`.
-  2. It navigates to `/game/:id?h=<hostId>` via `window.location.href`.
-  3. The game page's server-side `load` function validates the `?h=` token against `game.hostId`, sets the `playerId` cookie in **this response's headers** (not in a redirect), and returns the lobby data directly.
-  4. Browsers always commit `Set-Cookie` headers before executing any JavaScript, so the cookie is in place before `onMount` runs — guaranteed on every browser and network configuration.
-  5. `onMount` calls `history.replaceState` to strip the one-time `?h=` token from the address bar, giving a clean URL.
-- The invite URL shown in the lobby is always the clean `/game/:id` URL (built from `window.location.origin + '/game/' + game.id`, independent of the address-bar URL).
-- The SSE endpoint accepts the player ID via the `?pid=` query parameter as a reliable fallback, because `EventSource` does not support custom headers and cookies may not be forwarded in all environments (proxies, certain browser configurations, etc.)
-- The SSE stream uses a proper `cancel()` cleanup hook (not the ignored `start()` return value), a 25-second heartbeat to keep connections alive through proxies, and `X-Accel-Buffering: no` to prevent reverse-proxy buffering
-- The move API response includes the new game state; the moving player's board is updated immediately from that response rather than waiting for the SSE echo, so both players see changes in real time
+
+### Player identity and game flow
+
+Player identity is managed via a `playerId` cookie (set server-side, `HttpOnly`) combined with `sessionStorage` for reliable cross-environment recovery.
+
+**Game creation (host):**
+
+1. Home page calls `POST /api/games` → receives `{ gameId, hostId }`
+2. Stores `hostId` in `sessionStorage['chess-pid-<gameId>']` — synchronous, reliable on all origins
+3. Navigates to `/game/:id?h=<hostId>` (full page navigation)
+4. Server-side `load` validates the `?h=` token → sets cookie → returns lobby data with `playerId = hostId`
+5. `onMount` stores the `playerId` in `sessionStorage` and opens the SSE stream
+
+**Joining (guest) and identity recovery:**
+
+- The server-side `load` function never auto-joins anyone — it only identifies players with a valid cookie or `?h=` token
+- `onMount` calls `POST /api/games/:id/join` for any visitor not identified server-side. The join endpoint:
+  - Accepts `X-Player-Id` header for identity recovery (cookie was lost but `sessionStorage` still has the ID)
+  - Generates a new UUID for fresh guests
+  - Always (re-)commits the `playerId` cookie in the response
+- After the `fetch()` Promise for join resolves, the cookie is committed; subsequent move and chat requests work correctly
+
+**Why this is reliable on LAN/IP addresses:**
+
+- `sessionStorage` is synchronous and not subject to cookie-timing races
+- The join endpoint commits the cookie in its response; `fetch()` guarantees the cookie is in the jar before the Promise resolves
+- This eliminates the race where a SvelteKit client-side navigation could reach the server's `load` function before a `Set-Cookie` from a prior response was committed
+
+**SSE:**
+
+- The SSE endpoint accepts the player ID via `?pid=` query parameter because `EventSource` does not support custom headers and cookies may not be forwarded in all proxy environments
+- A 25-second heartbeat keeps connections alive through proxies; `X-Accel-Buffering: no` prevents reverse-proxy buffering; `cancel()` handles cleanup
+
+**Clipboard:**
+
+- The copy button uses `navigator.clipboard` on secure contexts (HTTPS / localhost) and falls back to `document.execCommand('copy')` for plain HTTP on LAN
