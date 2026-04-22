@@ -112,3 +112,5 @@ features/
 - **Player identity** is stored in a server-side cookie (`playerId`) set when creating or joining a game
 - Game creation uses a SvelteKit **form action** (`POST /?/createGame`) which sets the `playerId` cookie and redirects to the game page in a single server round-trip, ensuring the cookie is available before the game page loads
 - The SSE endpoint accepts the player ID via the `?pid=` query parameter as a reliable fallback, because `EventSource` does not support custom headers and cookies may not be forwarded in all environments (proxies, certain browser configurations, etc.)
+- The SSE stream uses a proper `cancel()` cleanup hook (not the ignored `start()` return value), a 25-second heartbeat to keep connections alive through proxies, and `X-Accel-Buffering: no` to prevent reverse-proxy buffering
+- The move API response includes the new game state; the moving player's board is updated immediately from that response rather than waiting for the SSE echo, so both players see changes in real time

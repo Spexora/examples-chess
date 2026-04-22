@@ -5,6 +5,9 @@
   export let playerId: string;
   export let gameId: string;
   export let disabled = false;
+  // Called by the parent when a new message should be appended immediately
+  // (before the SSE echo arrives), keeping the UI snappy for the sender.
+  export let onMessageSent: ((msg: ChatMessage) => void) | undefined = undefined;
 
   let inputText = '';
   let sending = false;
@@ -16,11 +19,21 @@
     const text = inputText.trim();
     inputText = '';
     try {
-      await fetch(`/api/games/${gameId}/chat`, {
+      const res = await fetch(`/api/games/${gameId}/chat`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
+      if (res.ok) {
+        const body = await res.json();
+        // Optimistically surface the message for the sender immediately.
+        // The SSE chat_message event will deliver it to the opponent and
+        // will also arrive for the sender — duplicates are deduplicated by
+        // the `(msg.id)` key in the {#each} loop.
+        if (body.message && onMessageSent) {
+          onMessageSent(body.message);
+        }
+      }
     } catch {
       inputText = text;
     } finally {

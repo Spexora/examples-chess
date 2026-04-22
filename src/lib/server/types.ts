@@ -59,7 +59,8 @@ export type EventType =
   | "game_started"
   | "state_update"
   | "game_over"
-  | "chat_message";
+  | "chat_message"
+  | "ping";
 
 export interface GameEvent {
   type: EventType;

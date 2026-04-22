@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PageData } from './$types.js';
-  import type { Game, GameEvent } from '$lib/server/types.js';
+  import type { Game, GameEvent, ChatMessage } from '$lib/server/types.js';
   import Board from './components/Board.svelte';
   import Chat from './components/Chat.svelte';
   import { onMount, onDestroy } from 'svelte';
@@ -22,6 +22,7 @@
 
   function connectSSE() {
     if (!isParticipant || typeof EventSource === 'undefined') return;
+    // Close any existing connection before opening a new one.
     eventSource?.close();
     // Pass playerId as a query parameter because EventSource does not
     // support custom headers and cookies may not be forwarded reliably in
@@ -31,11 +32,19 @@
     eventSource.onmessage = (e) => {
       try {
         const event: GameEvent = JSON.parse(e.data);
+        // Ignore heartbeat pings — they carry no game state.
+        if (event.type === 'ping') return;
         game = { ...game, ...(event.data as Game) };
-      } catch {}
+      } catch {
+        // Malformed message — ignore.
+      }
     };
     eventSource.onerror = () => {
-      setTimeout(connectSSE, 2000);
+      // Close the broken connection and reconnect after a short delay.
+      // EventSource has built-in reconnection, but we close explicitly so
+      // we control the timing and avoid stale handlers.
+      eventSource?.close();
+      setTimeout(connectSSE, 3000);
     };
   }
 
@@ -59,8 +68,13 @@
       const body = await res.json();
       if (!body.accepted) {
         moveError = body.reason ?? 'Move rejected';
+      } else if (body.game) {
+        // Apply the updated game state immediately from the API response so
+        // the player who moved sees the result right away.  The SSE stream
+        // will also deliver a state_update to both players shortly after,
+        // which is the canonical update for the opponent.
+        game = body.game;
       }
-      // The actual state update comes via SSE
     } catch {
       moveError = 'Network error. Please try again.';
     }
@@ -73,6 +87,16 @@
       setTimeout(() => (copySuccess = false), 2000);
     } catch {
       // Fallback for environments without clipboard API
+    }
+  }
+
+  function handleMessageSent(msg: ChatMessage) {
+    // Optimistically surface the sent message for the local player immediately.
+    // When the SSE chat_message event arrives it will carry the full chat
+    // array from the server, which naturally deduplicates any temporary
+    // optimistic entry because the {#each} loop uses msg.id as the key.
+    if (!game.chat.some((m) => m.id === msg.id)) {
+      game = { ...game, chat: [...game.chat, msg] };
     }
   }
 
@@ -151,7 +175,7 @@
       </section>
 
       <aside class="side-panel">
-        <Chat messages={game.chat} {playerId} gameId={game.id} disabled={game.status === 'finished'} />
+        <Chat messages={game.chat} {playerId} gameId={game.id} disabled={game.status === 'finished'} onMessageSent={handleMessageSent} />
       </aside>
     </div>
   </main>
