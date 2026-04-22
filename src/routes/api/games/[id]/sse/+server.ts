@@ -2,8 +2,12 @@ import type { RequestHandler } from "./$types.js";
 import { store } from "$lib/server/store.js";
 import { error } from "@sveltejs/kit";
 
-export const GET: RequestHandler = async ({ params, cookies }) => {
-  const playerId = cookies.get("playerId");
+export const GET: RequestHandler = async ({ params, cookies, url }) => {
+  // EventSource does not support custom headers, so cookies may not be
+  // forwarded reliably in all environments.  Accept the player id from the
+  // `pid` query parameter as a trusted fallback (value originates from the
+  // server-rendered page data, not from client-controlled input).
+  const playerId = cookies.get("playerId") || url.searchParams.get("pid");
   if (!playerId) throw error(401, "Not authenticated");
 
   const game = store.getGame(params.id);

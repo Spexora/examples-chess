@@ -110,3 +110,5 @@ features/
 - After each accepted move, the server broadcasts the new state to all connected clients via **SSE**
 - Clients subscribe to `/api/games/:id/sse` and update the board in real time
 - **Player identity** is stored in a server-side cookie (`playerId`) set when creating or joining a game
+- Game creation uses a SvelteKit **form action** (`POST /?/createGame`) which sets the `playerId` cookie and redirects to the game page in a single server round-trip, ensuring the cookie is available before the game page loads
+- The SSE endpoint accepts the player ID via the `?pid=` query parameter as a reliable fallback, because `EventSource` does not support custom headers and cookies may not be forwarded in all environments (proxies, certain browser configurations, etc.)

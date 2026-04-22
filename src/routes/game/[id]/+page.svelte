@@ -23,7 +23,11 @@
   function connectSSE() {
     if (!isParticipant || typeof EventSource === 'undefined') return;
     eventSource?.close();
-    eventSource = new EventSource(`/api/games/${game.id}/sse`);
+    // Pass playerId as a query parameter because EventSource does not
+    // support custom headers and cookies may not be forwarded reliably in
+    // all environments (proxies, certain SvelteKit dev/build configs, etc.)
+    const url = `/api/games/${game.id}/sse?pid=${encodeURIComponent(playerId)}`;
+    eventSource = new EventSource(url);
     eventSource.onmessage = (e) => {
       try {
         const event: GameEvent = JSON.parse(e.data);

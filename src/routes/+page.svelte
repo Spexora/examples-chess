@@ -1,30 +1,18 @@
 <script lang="ts">
-  import { goto } from '$app/navigation';
+  import { enhance } from '$app/forms';
 
   let selectedColor: 'white' | 'black' | null = null;
+  let validationError = '';
   let loading = false;
-  let error = '';
 
-  async function createGame() {
+  function handleSubmit(event: SubmitEvent) {
     if (!selectedColor) {
-      error = 'Please choose a color to play as.';
+      event.preventDefault();
+      validationError = 'Please choose a color to play as.';
       return;
     }
+    validationError = '';
     loading = true;
-    error = '';
-    try {
-      const res = await fetch('/api/games', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ color: selectedColor }),
-      });
-      if (!res.ok) throw new Error('Failed to create game');
-      const { gameId } = await res.json();
-      goto(`/game/${gameId}`);
-    } catch (e) {
-      error = 'Could not create game. Please try again.';
-      loading = false;
-    }
   }
 </script>
 
@@ -37,35 +25,46 @@
     <h1 class="title">♟ Chess</h1>
     <p class="subtitle">Challenge a friend to a game</p>
 
-    <div class="color-choice">
-      <p class="label">Play as</p>
-      <div class="color-buttons">
-        <button
-          class="color-btn {selectedColor === 'white' ? 'selected' : ''}"
-          on:click={() => (selectedColor = 'white')}
-          aria-pressed={selectedColor === 'white'}
-        >
-          <span class="piece-icon">♔</span>
-          White
-        </button>
-        <button
-          class="color-btn {selectedColor === 'black' ? 'selected' : ''}"
-          on:click={() => (selectedColor = 'black')}
-          aria-pressed={selectedColor === 'black'}
-        >
-          <span class="piece-icon">♚</span>
-          Black
-        </button>
+    <form
+      method="POST"
+      action="?/createGame"
+      use:enhance
+      on:submit={handleSubmit}
+    >
+      <input type="hidden" name="color" value={selectedColor ?? ''} />
+
+      <div class="color-choice">
+        <p class="label">Play as</p>
+        <div class="color-buttons">
+          <button
+            type="button"
+            class="color-btn {selectedColor === 'white' ? 'selected' : ''}"
+            on:click={() => (selectedColor = 'white')}
+            aria-pressed={selectedColor === 'white'}
+          >
+            <span class="piece-icon">♔</span>
+            White
+          </button>
+          <button
+            type="button"
+            class="color-btn {selectedColor === 'black' ? 'selected' : ''}"
+            on:click={() => (selectedColor = 'black')}
+            aria-pressed={selectedColor === 'black'}
+          >
+            <span class="piece-icon">♚</span>
+            Black
+          </button>
+        </div>
       </div>
-    </div>
 
-    {#if error}
-      <p class="error">{error}</p>
-    {/if}
+      {#if validationError}
+        <p class="error">{validationError}</p>
+      {/if}
 
-    <button class="create-btn" on:click={createGame} disabled={loading}>
-      {loading ? 'Creating…' : 'Create Game & Get Invite Link'}
-    </button>
+      <button type="submit" class="create-btn" disabled={loading}>
+        {loading ? 'Creating…' : 'Create Game & Get Invite Link'}
+      </button>
+    </form>
   </div>
 </main>
 
