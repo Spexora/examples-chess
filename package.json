@@ -1,0 +1,27 @@
+{
+  "name": "template",
+  "version": "1.0.0",
+  "description": "Example for Spexora",
+  "homepage": "https://github.com/Spexora/template#readme",
+  "bugs": {
+    "url": "https://github.com/Spexora/template/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Spexora/template.git"
+  },
+  "license": "MIT",
+  "author": "Hattorius (Aaron Jonk)",
+  "type": "module",
+  "scripts": {
+    "test": "cucumber-js",
+    "prettier": "prettier --write --ignore-unknown ."
+  },
+  "devDependencies": {
+    "@cucumber/cucumber": "^12.8.1",
+    "@types/node": "^25.6.0",
+    "prettier": "3.8.3",
+    "tsx": "^4.21.0",
+    "typescript": "^6.0.3"
+  }
+}
