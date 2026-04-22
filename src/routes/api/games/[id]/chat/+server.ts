@@ -2,8 +2,11 @@ import { json, error } from "@sveltejs/kit";
 import type { RequestHandler } from "./$types.js";
 import { store } from "$lib/server/store.js";
 
-export const GET: RequestHandler = async ({ params, cookies }) => {
-  const playerId = cookies.get("playerId");
+export const GET: RequestHandler = async ({ params, cookies, request }) => {
+  // Accept player identity from cookie (primary) or X-Player-Id header
+  // (fallback for environments where cookies are not reliably forwarded).
+  const playerId =
+    cookies.get("playerId") ?? request.headers.get("x-player-id");
   if (!playerId) throw error(401, "Not authenticated");
 
   const result = store.getChatMessages(params.id, playerId);
@@ -13,7 +16,10 @@ export const GET: RequestHandler = async ({ params, cookies }) => {
 };
 
 export const POST: RequestHandler = async ({ params, request, cookies }) => {
-  const playerId = cookies.get("playerId");
+  // Accept player identity from cookie (primary) or X-Player-Id header
+  // (fallback for environments where cookies are not reliably forwarded).
+  const playerId =
+    cookies.get("playerId") ?? request.headers.get("x-player-id");
   if (!playerId) throw error(401, "Not authenticated");
 
   const body = await request.json();

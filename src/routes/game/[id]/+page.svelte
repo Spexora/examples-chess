@@ -113,7 +113,12 @@
     try {
       const res = await fetch(`/api/games/${game.id}/move`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          // Always include the player ID as a header so the move endpoint can
+          // authenticate even if the cookie isn't forwarded (LAN/IP environments).
+          'X-Player-Id': playerId,
+        },
         body: JSON.stringify({ from, to, promotion }),
       });
       const body = await res.json();

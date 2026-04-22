@@ -3,7 +3,11 @@ import type { RequestHandler } from "./$types.js";
 import { store } from "$lib/server/store.js";
 
 export const POST: RequestHandler = async ({ params, request, cookies }) => {
-  const playerId = cookies.get("playerId");
+  // Accept player identity from cookie (primary) or X-Player-Id header
+  // (fallback for environments where cookies are not reliably forwarded to
+  // API fetch calls — e.g. LAN/IP addresses in certain browser configurations).
+  const playerId =
+    cookies.get("playerId") ?? request.headers.get("x-player-id");
   if (!playerId) throw error(401, "Not authenticated");
 
   const body = await request.json();
