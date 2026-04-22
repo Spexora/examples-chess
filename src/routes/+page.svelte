@@ -34,11 +34,19 @@
         return;
       }
 
-      const { gameId } = await res.json();
+      const { gameId, hostId } = await res.json();
 
-      // Full browser navigation — NOT a SvelteKit goto() — so the new page
-      // request is always made with the freshly-set cookie in the cookie jar.
-      window.location.href = `/game/${gameId}`;
+      // Navigate to the game page with the hostId embedded as a query
+      // parameter.  The game page's load function validates this token,
+      // sets the playerId cookie in its HTTP response, and then issues an
+      // HTTP 302 redirect to the clean /game/:id URL.  Because the browser
+      // processes Set-Cookie headers from redirect responses BEFORE following
+      // the redirect, the cookie is guaranteed to be present on every
+      // subsequent request — regardless of whether the app is accessed via
+      // localhost or a LAN/IP address.  This is more reliable than relying
+      // on the fetch() Set-Cookie path, which can lose the race against the
+      // navigation request in some browser/OS/network configurations.
+      window.location.href = `/game/${gameId}?h=${encodeURIComponent(hostId)}`;
     } catch {
       loading = false;
       validationError = 'Network error. Please try again.';
