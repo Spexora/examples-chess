@@ -82,10 +82,16 @@
     background: var(--bg-panel);
     border: 1px solid var(--border);
     border-radius: 12px;
-    padding: 3rem;
+    padding: 2.5rem 2rem;
     width: 100%;
     max-width: 420px;
     box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  form {
     display: flex;
     flex-direction: column;
     gap: 1.5rem;
@@ -105,13 +111,18 @@
     font-size: 1rem;
   }
 
+  .color-choice {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
   .label {
     color: var(--text-secondary);
     font-size: 0.875rem;
     font-weight: 500;
     text-transform: uppercase;
     letter-spacing: 1px;
-    margin-bottom: 0.5rem;
   }
 
   .color-buttons {

@@ -4,21 +4,24 @@
   import Board from './components/Board.svelte';
   import Chat from './components/Chat.svelte';
   import { onMount, onDestroy } from 'svelte';
-  import { page } from '$app/stores';
 
-  export let data: PageData;
+  let { data }: { data: PageData } = $props();
 
-  let game: Game = data.game;
-  let playerId: string = data.playerId;
-  let isFull: boolean = data.isFull;
-  let eventSource: EventSource | null = null;
-  let moveError = '';
-  let copySuccess = false;
+  let game: Game = $state(data.game);
+  const playerId: string = data.playerId;
+  const isFull: boolean = data.isFull;
+  let eventSource: EventSource | null = $state(null);
+  let moveError = $state('');
+  let copySuccess = $state(false);
 
-  $: playerColor = game.hostId === playerId ? game.hostColor : game.hostColor === 'white' ? 'black' : 'white';
-  $: isParticipant = game.hostId === playerId || game.guestId === playerId;
-  $: isMyTurn = game.status === 'active' && game.turn === playerColor;
-  $: inviteUrl = typeof window !== 'undefined' ? `${window.location.origin}/game/${game.id}` : `/game/${game.id}`;
+  let playerColor = $derived(
+    game.hostId === playerId ? game.hostColor : game.hostColor === 'white' ? 'black' : 'white'
+  );
+  let isParticipant = $derived(game.hostId === playerId || game.guestId === playerId);
+  let isMyTurn = $derived(game.status === 'active' && game.turn === playerColor);
+  let inviteUrl = $derived(
+    typeof window !== 'undefined' ? `${window.location.origin}/game/${game.id}` : `/game/${game.id}`
+  );
 
   function connectSSE() {
     if (!isParticipant || typeof EventSource === 'undefined') return;
@@ -56,9 +59,9 @@
     eventSource?.close();
   });
 
-  async function handleMove(e: CustomEvent<{ from: string; to: string; promotion?: string }>) {
+  async function handleMove(detail: { from: string; to: string; promotion?: string }) {
     moveError = '';
-    const { from, to, promotion } = e.detail;
+    const { from, to, promotion } = detail;
     try {
       const res = await fetch(`/api/games/${game.id}/move`, {
         method: 'POST',
@@ -143,14 +146,14 @@
         <p class="invite-label">Share this link with your opponent:</p>
         <div class="invite-link-box">
           <span class="invite-url">{inviteUrl}</span>
-          <button class="copy-btn" on:click={copyInviteLink}>
+          <button class="copy-btn" onclick={copyInviteLink}>
             {copySuccess ? '✓ Copied!' : 'Copy'}
           </button>
         </div>
       </div>
 
       <div class="board-preview">
-        <Board {game} {playerId} on:move={() => {}} />
+        <Board {game} {playerId} onmove={() => {}} />
       </div>
       <p class="board-disabled-note">The board is not active until the game starts.</p>
     </div>
@@ -165,7 +168,7 @@
         {#if moveError}
           <p class="move-error">{moveError}</p>
         {/if}
-        <Board {game} {playerId} on:move={handleMove} />
+        <Board {game} {playerId} onmove={handleMove} />
         <div class="player-info">
           <div class="player">
             <span class="piece-icon">{playerColor === 'white' ? '♔' : '♚'}</span>

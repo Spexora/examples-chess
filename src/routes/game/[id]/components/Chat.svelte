@@ -1,17 +1,23 @@
 <script lang="ts">
   import type { ChatMessage } from '$lib/server/types.js';
 
-  export let messages: ChatMessage[] = [];
-  export let playerId: string;
-  export let gameId: string;
-  export let disabled = false;
-  // Called by the parent when a new message should be appended immediately
-  // (before the SSE echo arrives), keeping the UI snappy for the sender.
-  export let onMessageSent: ((msg: ChatMessage) => void) | undefined = undefined;
+  let {
+    messages = [],
+    playerId,
+    gameId,
+    disabled = false,
+    onMessageSent = undefined,
+  }: {
+    messages?: ChatMessage[];
+    playerId: string;
+    gameId: string;
+    disabled?: boolean;
+    onMessageSent?: ((msg: ChatMessage) => void) | undefined;
+  } = $props();
 
-  let inputText = '';
-  let sending = false;
-  let messagesEl: HTMLDivElement;
+  let inputText = $state('');
+  let sending = $state(false);
+  let messagesEl = $state<HTMLDivElement | undefined>(undefined);
 
   async function sendMessage() {
     if (!inputText.trim() || sending || disabled) return;
@@ -48,11 +54,15 @@
     }
   }
 
-  $: if (messages && messagesEl) {
-    setTimeout(() => {
-      messagesEl?.scrollTo({ top: messagesEl.scrollHeight, behavior: 'smooth' });
-    }, 0);
-  }
+  $effect(() => {
+    // Re-run whenever messages changes so the list scrolls to the latest entry.
+    if (messages && messagesEl) {
+      const el = messagesEl;
+      setTimeout(() => {
+        el?.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      }, 0);
+    }
+  });
 </script>
 
 <aside class="chat-panel">
@@ -72,13 +82,13 @@
     {/each}
   </div>
 
-  <form class="chat-form" on:submit|preventDefault={sendMessage}>
+  <form class="chat-form" onsubmit={(e) => { e.preventDefault(); sendMessage(); }}>
     <input
       type="text"
       bind:value={inputText}
       placeholder="Type a message…"
       disabled={disabled || sending}
-      on:keydown={handleKeydown}
+      onkeydown={handleKeydown}
       maxlength="500"
     />
     <button type="submit" disabled={disabled || sending || !inputText.trim()}>Send</button>

@@ -1,18 +1,24 @@
 <script lang="ts">
   import type { Game } from '$lib/server/types.js';
-  import { createEventDispatcher } from 'svelte';
 
-  export let game: Game;
-  export let playerId: string;
+  let {
+    game,
+    playerId,
+    onmove = () => {},
+  }: {
+    game: Game;
+    playerId: string;
+    onmove?: (detail: { from: string; to: string; promotion?: string }) => void;
+  } = $props();
 
-  const dispatch = createEventDispatcher<{ move: { from: string; to: string; promotion?: string } }>();
+  let playerColor = $derived(
+    game.hostId === playerId ? game.hostColor : game.hostColor === 'white' ? 'black' : 'white'
+  );
+  let isMyTurn = $derived(game.status === 'active' && game.turn === playerColor);
 
-  $: playerColor = game.hostId === playerId ? game.hostColor : game.hostColor === 'white' ? 'black' : 'white';
-  $: isMyTurn = game.status === 'active' && game.turn === playerColor;
-
-  let selectedSquare: string | null = null;
-  let legalMoves: string[] = [];
-  let hoveredSquare: string | null = null;
+  let selectedSquare: string | null = $state(null);
+  let legalMoves: string[] = $state([]);
+  let hoveredSquare: string | null = $state(null);
 
   function getSquareClass(file: number, rank: number): string {
     const isLight = (file + rank) % 2 === 0;
@@ -109,7 +115,7 @@
         selectedSquare = null;
         legalMoves = [];
 
-        dispatch('move', { from, to, promotion: isPromotion ? 'q' : undefined });
+        onmove({ from, to, promotion: isPromotion ? 'q' : undefined });
       } else if (squareName === selectedSquare) {
         // Deselect
         selectedSquare = null;
@@ -150,10 +156,10 @@
           role="button"
           tabindex="0"
           aria-label="{squareName}{piece ? ' ' + piece : ''}"
-          on:click={() => handleSquareClick(file, rank)}
-          on:keydown={(e) => e.key === 'Enter' && handleSquareClick(file, rank)}
-          on:mouseenter={() => (hoveredSquare = squareName)}
-          on:mouseleave={() => (hoveredSquare = null)}
+          onclick={() => handleSquareClick(file, rank)}
+          onkeydown={(e) => e.key === 'Enter' && handleSquareClick(file, rank)}
+          onmouseenter={() => (hoveredSquare = squareName)}
+          onmouseleave={() => (hoveredSquare = null)}
         >
           {#if piece}
             <span
@@ -199,6 +205,7 @@
   .board {
     display: grid;
     grid-template-columns: repeat(8, 1fr);
+    grid-template-rows: repeat(8, 1fr);
     width: clamp(280px, 60vmin, 560px);
     height: clamp(280px, 60vmin, 560px);
     border: 2px solid var(--border);
@@ -213,6 +220,9 @@
     align-items: center;
     justify-content: center;
     cursor: pointer;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
     transition: background-color var(--transition-hover);
   }
 
