@@ -1,0 +1,99 @@
+/* Chess Application - Dark & White Theme */
+:root {
+  --bg-primary: #121212;
+  --bg-secondary: #1e1e1e;
+  --bg-panel: #252525;
+  --bg-input: #2d2d2d;
+  --text-primary: #f0f0f0;
+  --text-secondary: #a0a0a0;
+  --text-muted: #606060;
+  --accent: #ffffff;
+  --accent-hover: #e0e0e0;
+  --border: #333333;
+  --border-hover: #555555;
+  --highlight-legal: rgba(255, 255, 255, 0.3);
+  --highlight-selected: rgba(255, 255, 255, 0.5);
+  --highlight-hover: rgba(255, 255, 255, 0.15);
+  --board-light: #f0d9b5;
+  --board-dark: #b58863;
+  --board-light-hover: #f6e8c9;
+  --board-dark-hover: #c49a72;
+  --board-light-selected: #f6f669;
+  --board-dark-selected: #baca2b;
+  --board-light-legal: #cdd26a;
+  --board-dark-legal: #aaa23a;
+  --piece-hover-scale: 1.08;
+  --transition-move: 200ms ease;
+  --transition-hover: 100ms ease;
+  --chat-width: 300px;
+  --shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family:
+    "Segoe UI",
+    system-ui,
+    -apple-system,
+    sans-serif;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--accent-hover);
+  text-decoration: underline;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 20px;
+  font-size: 1rem;
+  font-weight: 600;
+  transition:
+    background-color var(--transition-hover),
+    transform var(--transition-hover);
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+input,
+textarea {
+  background-color: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 1rem;
+  padding: 8px 12px;
+  outline: none;
+  transition: border-color var(--transition-hover);
+}
+
+input:focus,
+textarea:focus {
+  border-color: var(--border-hover);
+}
